@@ -1,62 +1,76 @@
 ---
-- name: Patch PVC keycloak-00-pwxs-pgdata to desired size
-  kubernetes.core.k8s:
-    api_version: v1
+- name: Gather Keycloak PVCs
+  k8s_info:
     kind: PersistentVolumeClaim
-    name: "{{ pvc_pgdata }}"
     namespace: "{{ namespace }}"
-    merge_type: strategic-merge
+    label_selectors:
+      - "postgres-operator.crunchydata.com/cluster=keycloak"
+  register: keycloak_pvcs
+
+- name: Patch all Keycloak PVCs to increase storage
+  k8s:
+    state: present
+    namespace: "{{ namespace }}"
+    kind: PersistentVolumeClaim
+    name: "{{ item.metadata.name }}"
+    merge_type:
+      - strategic-merge
     definition:
       spec:
-        accessModes:
-          - ReadWriteOnce
         resources:
           requests:
             storage: "{{ new_size }}"
+  loop: "{{ keycloak_pvcs.resources }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
 
-- name: Patch PVC keycloak-repo1 to desired size
-  kubernetes.core.k8s:
-    api_version: v1
+- name: Wait for PVC resize to reflect
+  k8s_info:
     kind: PersistentVolumeClaim
-    name: "{{ pvc_repo }}"
     namespace: "{{ namespace }}"
-    merge_type: strategic-merge
-    definition:
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: "{{ new_size }}"
+    name: "{{ item.metadata.name }}"
+  loop: "{{ keycloak_pvcs.resources }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+  register: pvc_info
+  until: pvc_info.resources[0].status.capacity.storage == new_size
+  retries: 15
+  delay: 10
 
-- name: Wait for PVC keycloak-00-pwxs-pgdata to be resized
-  shell: |
-    until oc get pvc {{ pvc_pgdata }} -n {{ namespace }} -o jsonpath='{.status.capacity.storage}' | grep -q '{{ new_size }}'; do
-      echo "Waiting for PVC resize..."
-      sleep 5
-    done
-  register: pvc_wait
+- name: Gather Keycloak pods
+  k8s_info:
+    kind: Pod
+    namespace: "{{ namespace }}"
+    label_selectors:
+      - "postgres-operator.crunchydata.com/cluster=keycloak"
+  register: keycloak_pods
+
+- name: Delete Keycloak pods to pick up new PVC size
+  k8s:
+    state: absent
+    namespace: "{{ namespace }}"
+    kind: Pod
+    name: "{{ item.metadata.name }}"
+  loop: "{{ keycloak_pods.resources }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+
+- name: Wait for pods to be running again
+  k8s_info:
+    kind: Pod
+    namespace: "{{ namespace }}"
+    name: "{{ item.metadata.name }}"
+  loop: "{{ keycloak_pods.resources }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+  register: pod_info
+  until: pod_info.resources[0].status.phase == "Running"
   retries: 20
   delay: 15
-  until: pvc_wait.rc == 0
 
-- name: Delete Postgres pod to trigger restart
-  shell: oc delete pod {{ pg_pod_name }} -n {{ namespace }}
-  ignore_errors: yes
-
-- name: Wait for Postgres pod to be Running
-  shell: |
-    until oc get pod {{ pg_pod_name }} -n {{ namespace }} -o jsonpath='{.status.phase}' | grep -q 'Running'; do
-      echo "Waiting for Postgres pod to restart..."
-      sleep 5
-    done
-  retries: 20
-  delay: 15
-
-- name: Display storage usage after resize
-  shell: oc exec -it {{ pg_pod_name }} -n {{ namespace }} -- df -h /pgdata
-  register: df_output
-
-- name: Show df -h output
-  debug:
-    var: df_output.stdout
+- name: Show final PVC and pod status
+  block:
+    - name: PVC status
+      command: oc get pvc -n {{ namespace }}
+    - name: Pods status
+      command: oc get pods -n {{ namespace }}

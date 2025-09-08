@@ -1,59 +1,75 @@
 ---
-- name: Patch PVC keycloak-00-pwxs-pgdata to desired size
-  community.kubernetes.k8s:
-    api_version: v1
-    kind: PersistentVolumeClaim
-    name: "{{ pvc_pgdata }}"
-    namespace: "{{ namespace }}"
-    merge_type: strategic-merge
-    definition:
-      spec:
-        resources:
-          requests:
-            storage: "{{ new_size }}"
+- name: Resize Keycloak PVCs and restart Postgres pod
+  hosts: localhost
+  gather_facts: no
+  collections:
+    - kubernetes.core
+  vars:
+    namespace: tssc-keycloak
+    pvc_pgdata: keycloak-00-pwxs-pgdata
+    pvc_repo: keycloak-repo1
+    new_size: 10Gi
+    pg_pod_name: keycloak-00-pwxs-0
 
-- name: Patch PVC keycloak-repo1 to desired size
-  community.kubernetes.k8s:
-    api_version: v1
-    kind: PersistentVolumeClaim
-    name: "{{ pvc_repo }}"
-    namespace: "{{ namespace }}"
-    merge_type: strategic-merge
-    definition:
-      spec:
-        resources:
-          requests:
-            storage: "{{ new_size }}"
+  tasks:
+    - name: Patch PVC keycloak-00-pwxs-pgdata to desired size
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: PersistentVolumeClaim
+        name: "{{ pvc_pgdata }}"
+        namespace: "{{ namespace }}"
+        merge_type: strategic-merge
+        definition:
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: "{{ new_size }}"
 
-- name: Wait for PVC keycloak-00-pwxs-pgdata to be resized
-  shell: |
-    until oc get pvc {{ pvc_pgdata }} -n {{ namespace }} -o jsonpath='{.status.capacity.storage}' | grep -q '{{ new_size }}'; do
-      echo "Waiting for PVC resize..."
-      sleep 5
-    done
-  register: pvc_wait
-  retries: 20
-  delay: 15
-  until: pvc_wait.rc == 0
+    - name: Patch PVC keycloak-repo1 to desired size
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: PersistentVolumeClaim
+        name: "{{ pvc_repo }}"
+        namespace: "{{ namespace }}"
+        merge_type: strategic-merge
+        definition:
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: "{{ new_size }}"
 
-- name: Delete Postgres pod to trigger restart
-  shell: oc delete pod {{ pg_pod_name }} -n {{ namespace }}
-  ignore_errors: yes
+    - name: Wait for PVC keycloak-00-pwxs-pgdata to be resized
+      shell: |
+        until oc get pvc {{ pvc_pgdata }} -n {{ namespace }} -o jsonpath='{.status.capacity.storage}' | grep -q '{{ new_size }}'; do
+          echo "Waiting for PVC resize..."
+          sleep 5
+        done
+      register: pvc_wait
+      retries: 20
+      delay: 15
+      until: pvc_wait.rc == 0
 
-- name: Wait for Postgres pod to be Running
-  shell: |
-    until oc get pod {{ pg_pod_name }} -n {{ namespace }} -o jsonpath='{.status.phase}' | grep -q 'Running'; do
-      echo "Waiting for Postgres pod to restart..."
-      sleep 5
-    done
-  retries: 20
-  delay: 15
+    - name: Delete Postgres pod to trigger restart
+      shell: oc delete pod {{ pg_pod_name }} -n {{ namespace }}
+      ignore_errors: yes
 
-- name: Display storage usage after resize
-  shell: oc exec -it {{ pg_pod_name }} -n {{ namespace }} -- df -h /pgdata
-  register: df_output
+    - name: Wait for Postgres pod to be Running
+      shell: |
+        until oc get pod {{ pg_pod_name }} -n {{ namespace }} -o jsonpath='{.status.phase}' | grep -q 'Running'; do
+          echo "Waiting for Postgres pod to restart..."
+          sleep 5
+        done
+      retries: 20
+      delay: 15
 
-- name: Show df -h output
-  debug:
-    var: df_output.stdout
+    - name: Display storage usage after resize
+      shell: oc exec -it {{ pg_pod_name }} -n {{ namespace }} -- df -h /pgdata
+      register: df_output
 
+    - name: Show df -h output
+      debug:
+        var: df_output.stdout

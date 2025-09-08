@@ -1,5 +1,4 @@
 ---
----
 - name: Patch PVC keycloak-00-pwxs-pgdata to desired size
   community.kubernetes.k8s:
     api_version: v1

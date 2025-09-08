@@ -1,18 +1,6 @@
 ---
-- name: Install pip for Python 3.11
-  command: dnf install python3.11-pip -y
-
-- name: Install openshift and kubernetes Python packages
-  command: /usr/libexec/platform-python -m pip install openshift kubernetes
-
-- name: Install kubernetes and openshift for python3.11 user
-  command: python3.11 -m pip install --user kubernetes openshift jmespath
-
-- name: Install community.kubernetes collection
-  ansible.builtin.command: ansible-galaxy collection install community.kubernetes
-
 - name: Gather Keycloak PVCs
-  k8s_info:
+  community.kubernetes.k8s_info:
     kind: PersistentVolumeClaim
     namespace: "{{ namespace }}"
     label_selectors:
@@ -20,7 +8,7 @@
   register: keycloak_pvcs
 
 - name: Patch all Keycloak PVCs to increase storage
-  k8s:
+  community.kubernetes.k8s:
     state: present
     namespace: "{{ namespace }}"
     kind: PersistentVolumeClaim
@@ -37,7 +25,7 @@
     label: "{{ item.metadata.name }}"
 
 - name: Wait for PVC resize to reflect
-  k8s_info:
+  community.kubernetes.k8s_info:
     kind: PersistentVolumeClaim
     namespace: "{{ namespace }}"
     name: "{{ item.metadata.name }}"
@@ -50,7 +38,7 @@
   delay: 10
 
 - name: Gather Keycloak pods
-  k8s_info:
+  community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ namespace }}"
     label_selectors:
@@ -58,7 +46,7 @@
   register: keycloak_pods
 
 - name: Delete Keycloak pods to pick up new PVC size
-  k8s:
+  community.kubernetes.k8s:
     state: absent
     namespace: "{{ namespace }}"
     kind: Pod
@@ -68,7 +56,7 @@
     label: "{{ item.metadata.name }}"
 
 - name: Wait for pods to be running again
-  k8s_info:
+  community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ namespace }}"
     name: "{{ item.metadata.name }}"

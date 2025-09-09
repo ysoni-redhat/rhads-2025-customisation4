@@ -6,7 +6,7 @@
 
 - name: Set fact with parsed PVCs
   set_fact:
-    keycloak_pvcs: "{{ keycloak_pvcs_raw.stdout | from_json | json_query('items') }}"
+    keycloak_pvcs: "{{ (keycloak_pvcs_raw.stdout | from_json).items }}"
 
 - name: Patch all Keycloak PVCs to increase storage
   command: >
@@ -36,7 +36,7 @@
 
 - name: Set fact with parsed pods
   set_fact:
-    keycloak_pods: "{{ keycloak_pods_raw.stdout | from_json | json_query('items') }}"
+    keycloak_pods: "{{ (keycloak_pods_raw.stdout | from_json).items }}"
 
 - name: Delete Keycloak pods to pick up new PVC size
   command: >

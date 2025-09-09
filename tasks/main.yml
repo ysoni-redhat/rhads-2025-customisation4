@@ -62,4 +62,20 @@
   block:
     - name: Get current pod info
       command: >
-        oc get pod {{ item.metadata.name }} -n {
+        oc get pod {{ item.metadata.name }} -n {{ namespace }} -o json
+      register: pod_info_raw
+      loop: "{{ keycloak_pods }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+
+    - name: Set fact for pod status
+      set_fact:
+        pod_status: "{{ (pod_info_raw.results[0].stdout | from_json).status.phase }}"
+
+- name: Show final PVC and pod status
+  block:
+    - name: PVC status
+      command: oc get pvc -n {{ namespace }}
+
+    - name: Pods status
+      command: oc get pods -n {{ namespace }}

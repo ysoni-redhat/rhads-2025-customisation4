@@ -1,65 +1,73 @@
 ---
-- name: Gather Keycloak PVCs
-  command: >
-    oc get pvc -n {{ namespace }} -l postgres-operator.crunchydata.com/cluster=keycloak -o json
-  register: keycloak_pvcs_raw
+- hosts: localhost
+  gather_facts: no
+  vars:
+    namespace: your-namespace     # Set your namespace here
+    new_size: 12Gi                # Set the desired PVC size here
 
-- name: Set fact with parsed PVCs
-  set_fact:
-    keycloak_pvcs: "{{ keycloak_pvcs_raw.stdout | from_json.items }}"
+  tasks:
 
-- name: Patch all Keycloak PVCs to increase storage
-  command: >
-    oc patch pvc {{ item.metadata.name }}
-    -n {{ namespace }}
-    --type=merge
-    -p '{"spec": {"resources": {"requests": {"storage": "{{ new_size }}"}}}}'
-  loop: "{{ keycloak_pvcs }}"
-  loop_control:
-    label: "{{ item.metadata.name }}"
+    - name: Gather Keycloak PVCs
+      command: >
+        oc get pvc -n {{ namespace }} -l postgres-operator.crunchydata.com/cluster=keycloak -o json
+      register: keycloak_pvcs_raw
 
-- name: Wait for PVC resize to reflect
-  shell: >
-    oc get pvc {{ item.metadata.name }} -n {{ namespace }} -o json | jq -r '.status.capacity.storage'
-  register: pvc_capacity
-  until: pvc_capacity.stdout == new_size
-  retries: 15
-  delay: 10
-  loop: "{{ keycloak_pvcs }}"
-  loop_control:
-    label: "{{ item.metadata.name }}"
+    - name: Set fact with parsed PVCs
+      set_fact:
+        keycloak_pvcs: "{{ keycloak_pvcs_raw.stdout | from_json | json_query('items') }}"
 
-- name: Gather Keycloak pods
-  command: >
-    oc get pods -n {{ namespace }} -l postgres-operator.crunchydata.com/cluster=keycloak -o json
-  register: keycloak_pods_raw
+    - name: Patch all Keycloak PVCs to increase storage
+      command: >
+        oc patch pvc {{ item.metadata.name }}
+        -n {{ namespace }}
+        --type=merge
+        -p '{"spec": {"resources": {"requests": {"storage": "{{ new_size }}"}}}}'
+      loop: "{{ keycloak_pvcs }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
 
-- name: Set fact with parsed pods
-  set_fact:
-    keycloak_pods: "{{ keycloak_pods_raw.stdout | from_json.items }}"
+    - name: Wait for PVC resize to reflect
+      shell: >
+        oc get pvc {{ item.metadata.name }} -n {{ namespace }} -o json | jq -r '.status.capacity.storage'
+      register: pvc_capacity
+      until: pvc_capacity.stdout == new_size
+      retries: 15
+      delay: 10
+      loop: "{{ keycloak_pvcs }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
 
-- name: Delete Keycloak pods to pick up new PVC size
-  command: >
-    oc delete pod {{ item.metadata.name }} -n {{ namespace }}
-  loop: "{{ keycloak_pods }}"
-  loop_control:
-    label: "{{ item.metadata.name }}"
+    - name: Gather Keycloak pods
+      command: >
+        oc get pods -n {{ namespace }} -l postgres-operator.crunchydata.com/cluster=keycloak -o json
+      register: keycloak_pods_raw
 
-- name: Wait for pods to be running again
-  shell: >
-    oc get pod {{ item.metadata.name }} -n {{ namespace }} -o json | jq -r '.status.phase'
-  register: pod_status
-  until: pod_status.stdout == "Running"
-  retries: 20
-  delay: 15
-  loop: "{{ keycloak_pods }}"
-  loop_control:
-    label: "{{ item.metadata.name }}"
+    - name: Set fact with parsed pods
+      set_fact:
+        keycloak_pods: "{{ keycloak_pods_raw.stdout | from_json | json_query('items') }}"
 
-- name: Show final PVC and pod status
-  block:
-    - name: PVC status
-      command: oc get pvc -n {{ namespace }}
+    - name: Delete Keycloak pods to pick up new PVC size
+      command: >
+        oc delete pod {{ item.metadata.name }} -n {{ namespace }}
+      loop: "{{ keycloak_pods }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
 
-    - name: Pods status
-      command: oc get pods -n {{ namespace }}
+    - name: Wait for pods to be running again
+      shell: >
+        oc get pod {{ item.metadata.name }} -n {{ namespace }} -o json | jq -r '.status.phase'
+      register: pod_status
+      until: pod_status.stdout == "Running"
+      retries: 20
+      delay: 15
+      loop: "{{ keycloak_pods }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+
+    - name: Show final PVC and pod status
+      block:
+        - name: PVC status
+          command: oc get pvc -n {{ namespace }}
+
+        - name: Pods status
+          command: oc get pods -n {{ namespace }}

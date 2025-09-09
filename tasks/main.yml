@@ -103,3 +103,59 @@
 - name: Apply KeycloakRealmImport using oc
   command: >
     oc apply -f /tmp/keycloak_realm_import.yaml
+
+- name: Debug kubeconfig path
+  debug:
+    msg: "{{ kubeconfig_path }}"
+
+- name: Get Argo CD route
+  shell: >
+    oc -n {{ argo_namespace }} get route tssc-gitops-server -o jsonpath='{.spec.host}'
+  register: argo_route
+  changed_when: false
+
+- name: Set Argo CD host fact
+  set_fact:
+    argo_host: "{{ argo_route.stdout }}"
+
+- name: Log in to Argo CD CLI
+  shell: >
+    argocd login {{ argo_host }}
+    --username {{ argo_username }}
+    --password {{ argo_password }}
+    --grpc-web
+    --insecure
+  register: argo_login
+  changed_when: false
+
+- name: Get current Kubernetes context
+  shell: kubectl config current-context
+  register: current_context
+  changed_when: false
+
+- name: Remove existing in-cluster registration (if exists)
+  shell: >
+    argocd cluster rm https://kubernetes.default.svc --grpc-web --yes || true
+  register: remove_cluster
+  changed_when: false
+
+- name: Add OpenShift cluster to Argo CD with all namespaces
+  shell: >
+    argocd cluster add {{ current_context.stdout }}
+    --name in-cluster
+    --grpc-web
+    --yes
+    --upsert
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  register: add_cluster
+  changed_when: "'Cluster' in add_cluster.stdout or 'created' in add_cluster.stdout"
+
+- name: List registered clusters
+  shell: argocd cluster list --grpc-web
+  register: cluster_list
+  changed_when: false
+
+- name: Show cluster registration result
+  debug:
+    msg: "{{ cluster_list.stdout_lines }}"

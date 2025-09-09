@@ -9,3 +9,4 @@ argo_namespace: tssc-gitops
 argo_username: admin
 argo_password: {{ gitops_admin_password }}
 cluster_context: admin
+kubeconfig_path: "{{ ansible_env.HOME }}/.kube/config"

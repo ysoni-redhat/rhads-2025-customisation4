@@ -63,3 +63,43 @@
 
     - name: Pods status
       command: oc get pods -n {{ namespace }}
+
+- name: Patch the OpenShift Console resource to set logoutRedirect
+  command: >
+    oc patch console cluster
+    --type=merge
+    -p '{"spec": {"authentication": {"logoutRedirect": "{{ logout_redirect_url }}"}}}'
+  register: patch_result
+
+- name: Show patch result
+  debug:
+    var: patch_result.stdout
+
+- name: Apply KeycloakRealmImport custom resource
+  copy:
+    dest: /tmp/keycloak_realm_import.yaml
+    content: |
+      apiVersion: k8s.keycloak.org/v2alpha1
+      kind: KeycloakRealmImport
+      metadata:
+        name: trusted-artifact-signer
+        namespace: tssc-keycloak
+      spec:
+        keycloakCRName: keycloak
+        realm:
+          id: trusted-artifact-signer
+          realm: trusted-artifact-signer
+          displayName: "Trusted Artifact Signer"
+          enabled: true
+          clients:
+            - clientId: ocp4_workload_advanced_developer_suite_openshift_keycloak_client_id
+              enabled: true
+              protocol: openid-connect
+              redirectUris:
+                - "{{ ocp_console_url }}/*"
+              attributes:
+                post.logout.redirect.uris: "{{ ocp_console_url }}"
+
+- name: Apply KeycloakRealmImport using oc
+  command: >
+    oc apply -f /tmp/keycloak_realm_import.yaml

@@ -1,76 +1,77 @@
 ---
 - name: Gather Keycloak PVCs
-  community.kubernetes.k8s_info:
-    kind: PersistentVolumeClaim
-    namespace: "{{ namespace }}"
-    label_selectors:
-      - "postgres-operator.crunchydata.com/cluster=keycloak"
-  register: keycloak_pvcs
+  command: >
+    oc get pvc -n {{ namespace }} -l postgres-operator.crunchydata.com/cluster=keycloak -o json
+  register: keycloak_pvcs_raw
+
+- name: Set fact with parsed PVCs
+  set_fact:
+    keycloak_pvcs: "{{ keycloak_pvcs_raw.stdout | from_json | dict2items(key_name='metadata') }}"
 
 - name: Patch all Keycloak PVCs to increase storage
-  community.kubernetes.k8s:
-    state: present
-    namespace: "{{ namespace }}"
-    kind: PersistentVolumeClaim
-    name: "{{ item.metadata.name }}"
-    merge_type:
-      - strategic-merge
-    definition:
-      spec:
-        resources:
-          requests:
-            storage: "{{ new_size }}"
-  loop: "{{ keycloak_pvcs.resources }}"
+  command: >
+    oc patch pvc {{ item.metadata.name }}
+    -n {{ namespace }}
+    --type=merge
+    -p '{"spec": {"resources": {"requests": {"storage": "{{ new_size }}"}}}}'
+  loop: "{{ keycloak_pvcs }}"
   loop_control:
     label: "{{ item.metadata.name }}"
 
 - name: Wait for PVC resize to reflect
-  community.kubernetes.k8s_info:
-    kind: PersistentVolumeClaim
-    namespace: "{{ namespace }}"
-    name: "{{ item.metadata.name }}"
-  loop: "{{ keycloak_pvcs.resources }}"
-  loop_control:
-    label: "{{ item.metadata.name }}"
-  register: pvc_info
-  until: pvc_info.resources[0].status.capacity.storage == new_size
   retries: 15
   delay: 10
+  until: pvc_capacity == new_size
+  block:
+    - name: Get current PVC info
+      command: >
+        oc get pvc {{ item.metadata.name }} -n {{ namespace }} -o json
+      register: pvc_info_raw
+      loop: "{{ keycloak_pvcs }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+
+    - name: Set fact for PVC capacity
+      set_fact:
+        pvc_capacity: "{{ (pvc_info_raw.results[0].stdout | from_json).status.capacity.storage }}"
 
 - name: Gather Keycloak pods
-  community.kubernetes.k8s_info:
-    kind: Pod
-    namespace: "{{ namespace }}"
-    label_selectors:
-      - "postgres-operator.crunchydata.com/cluster=keycloak"
-  register: keycloak_pods
+  command: >
+    oc get pods -n {{ namespace }} -l postgres-operator.crunchydata.com/cluster=keycloak -o json
+  register: keycloak_pods_raw
+
+- name: Set fact with parsed pods
+  set_fact:
+    keycloak_pods: "{{ keycloak_pods_raw.stdout | from_json | dict2items(key_name='metadata') }}"
 
 - name: Delete Keycloak pods to pick up new PVC size
-  community.kubernetes.k8s:
-    state: absent
-    namespace: "{{ namespace }}"
-    kind: Pod
-    name: "{{ item.metadata.name }}"
-  loop: "{{ keycloak_pods.resources }}"
+  command: >
+    oc delete pod {{ item.metadata.name }} -n {{ namespace }}
+  loop: "{{ keycloak_pods }}"
   loop_control:
     label: "{{ item.metadata.name }}"
 
 - name: Wait for pods to be running again
-  community.kubernetes.k8s_info:
-    kind: Pod
-    namespace: "{{ namespace }}"
-    name: "{{ item.metadata.name }}"
-  loop: "{{ keycloak_pods.resources }}"
-  loop_control:
-    label: "{{ item.metadata.name }}"
-  register: pod_info
-  until: pod_info.resources[0].status.phase == "Running"
   retries: 20
   delay: 15
+  until: pod_status == "Running"
+  block:
+    - name: Get current pod info
+      command: >
+        oc get pod {{ item.metadata.name }} -n {{ namespace }} -o json
+      register: pod_info_raw
+      loop: "{{ keycloak_pods }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+
+    - name: Set fact for pod status
+      set_fact:
+        pod_status: "{{ (pod_info_raw.results[0].stdout | from_json).status.phase }}"
 
 - name: Show final PVC and pod status
   block:
     - name: PVC status
       command: oc get pvc -n {{ namespace }}
+
     - name: Pods status
       command: oc get pods -n {{ namespace }}

@@ -108,6 +108,28 @@
   debug:
     msg: "{{ kubeconfig_path }}"
 
+- name: Retrieve gitops credentials
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: tssc-gitops-cluster
+    namespace: "tssc-gitops"
+  register: r_gitops_credentials
+  retries: 120
+  delay: 10
+  until:
+    - r_gitops_credentials is defined
+    - r_gitops_credentials.resources is defined
+    - r_gitops_credentials.resources | length > 0
+
+- name: Set GitOps admin password fact
+  set_fact:
+    argo_password: "{{ r_gitops_credentials.resources[0].data['admin.password'] | b64decode }}"
+
+- name: Debug GitOps password (optional, remove in production)
+  debug:
+    msg: "ArgoCD admin password is {{ argo_password }}"
+
 - name: Get Argo CD route
   shell: >
     oc -n {{ argo_namespace }} get route tssc-gitops-server -o jsonpath='{.spec.host}'

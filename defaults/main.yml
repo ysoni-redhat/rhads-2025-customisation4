@@ -1,4 +1,5 @@
 ---
+argocd_version: "v3.1.5"
 namespace: tssc-keycloak
 new_size: 10Gi
 cluster_app_domain: "cluster-{{ guid }}.dynamic.redhatworkshops.io"

@@ -148,7 +148,7 @@
 
 - name: Log in to Argo CD CLI
   shell: >
-    argocd login {{ argo_host }}
+    /usr/local/bin/argocd login {{ argo_host }}
     --username {{ argo_username }}
     --password {{ argo_password }}
     --grpc-web
@@ -163,13 +163,13 @@
 
 - name: Remove existing in-cluster registration (if exists)
   shell: >
-    argocd cluster rm https://kubernetes.default.svc --grpc-web --yes || true
+    /usr/local/bin/argocd cluster rm https://kubernetes.default.svc --grpc-web --yes || true
   register: remove_cluster
   changed_when: false
 
 - name: Add OpenShift cluster to Argo CD with all namespaces
   shell: >
-    argocd cluster add {{ current_context.stdout }}
+    /usr/local/bin/argocd cluster add {{ current_context.stdout }}
     --name in-cluster
     --grpc-web
     --yes
@@ -180,7 +180,7 @@
   changed_when: "'Cluster' in add_cluster.stdout or 'created' in add_cluster.stdout"
 
 - name: List registered clusters
-  shell: argocd cluster list --grpc-web
+  shell: /usr/local/bin/argocd cluster list --grpc-web
   register: cluster_list
   changed_when: false
 

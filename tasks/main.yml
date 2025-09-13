@@ -1,4 +1,10 @@
 ---
+- name: Download ArgoCD CLI binary
+  get_url:
+    url: "https://github.com/argoproj/argo-cd/releases/download/{{ argocd_version }}/argocd-linux-amd64"
+    dest: /usr/local/bin/argocd
+    mode: '0755'
+
 - name: Gather Keycloak PVCs
   command: >
     oc get pvc -n {{ namespace }} -l postgres-operator.crunchydata.com/cluster=keycloak -o json

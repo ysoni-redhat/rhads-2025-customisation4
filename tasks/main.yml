@@ -187,3 +187,27 @@
 #- name: Show cluster registration result
 #  debug:
 #    msg: "{{ cluster_list.stdout_lines }}"
+
+- name: Create temporary .npmrc file with Red Hat registry entry
+  copy:
+    dest: /tmp/.npmrc
+    content: "@redhat:registry=https://npm.registry.redhat.com"
+    mode: '0644'   # Make file world-readable
+
+- name: Apply dynamic-plugins-npmrc Secret in OpenShift
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: dynamic-plugins-npmrc
+        namespace: tssc-dh
+      type: Opaque
+      data:
+        .npmrc: "{{ lookup('file', '/tmp/.npmrc') | b64encode }}"
+
+- name: Clean up temporary .npmrc file
+  file:
+    path: /tmp/.npmrc
+    state: absent

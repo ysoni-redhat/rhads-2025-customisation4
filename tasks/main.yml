@@ -184,6 +184,6 @@
 #  register: cluster_list
 #  changed_when: false
 
-- name: Show cluster registration result
-  debug:
-    msg: "{{ cluster_list.stdout_lines }}"
+#- name: Show cluster registration result
+#  debug:
+#    msg: "{{ cluster_list.stdout_lines }}"

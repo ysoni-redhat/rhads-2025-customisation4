@@ -163,9 +163,3 @@
   agnosticd_user_info:
     data:
       cluster_apps_domain: "{{ openshift_cluster_ingress_domain }}"
-      openshift_user: "{{ devspaces_user }}"
-      openshift_user_password: "{{ devspaces_user_password }}"
-
-- name: Deploy Showroom
-  ansible.builtin.include_role:
-    name: ocp4_workload_showroom

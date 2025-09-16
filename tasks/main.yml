@@ -146,48 +146,6 @@
   set_fact:
     argo_host: "{{ argo_route.stdout }}"
 
-#- name: Log in to Argo CD CLI
-#  shell: >
-#    /usr/local/bin/argocd login {{ argo_host }}
-#    --username {{ argo_username }}
-#    --password {{ argo_password }}
-#    --grpc-web
-#    --insecure
-#  register: argo_login
-#  changed_when: false
-
-#- name: Get current Kubernetes context
-#  shell: kubectl config current-context
-#  register: current_context
-#  changed_when: false
-
-#- name: Remove existing in-cluster registration (if exists)
-#  shell: >
-#    /usr/local/bin/argocd cluster rm https://kubernetes.default.svc --grpc-web --yes || true
-#  register: remove_cluster
-#  changed_when: false
-
-#- name: Add OpenShift cluster to Argo CD with all namespaces
-#  shell: >
-#    /usr/local/bin/argocd cluster add {{ current_context.stdout }}
-#    --name in-cluster
-#    --grpc-web
-#    --yes
-#    --upsert
-#  environment:
-#    KUBECONFIG: "{{ kubeconfig_path }}"
-#  register: add_cluster
-#  changed_when: "'Cluster' in add_cluster.stdout or 'created' in add_cluster.stdout"
-
-#- name: List registered clusters
-#  shell: /usr/local/bin/argocd cluster list --grpc-web
-#  register: cluster_list
-#  changed_when: false
-
-#- name: Show cluster registration result
-#  debug:
-#    msg: "{{ cluster_list.stdout_lines }}"
-
 - name: Create dynamic-plugins-npmrc Secret in OpenShift
   kubernetes.core.k8s:
     state: present
@@ -201,3 +159,9 @@
       data:
         .npmrc: "{{ '@redhat:registry=https://npm.registry.redhat.com' | b64encode }}"
 
+- name: Save user data
+  agnosticd_user_info:
+    data:
+      cluster_apps_domain: "{{ openshift_cluster_ingress_domain }}"
+      openshift_user: "{{ devspaces_user }}"
+      openshift_user_password: "{{ devspaces_user_password }}"

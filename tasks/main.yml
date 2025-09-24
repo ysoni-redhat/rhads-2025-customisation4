@@ -7,6 +7,40 @@
       openshift_console_url: "{{ openshift_console_url }}"
       openshift_user: "user1"
 
-- name: Deploy Showroom
-  ansible.builtin.include_role:
-    name: ocp4_workload_showroom
+- name: Find showroom namespace
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+  register: ns_info
+
+- name: Extract showroom namespace
+  set_fact:
+    showroom_ns: "{{ item.metadata.name }}"
+  loop: "{{ ns_info.resources }}"
+  when: item.metadata.name is match('^showroom-.*')
+
+- name: Get showroom-userdata ConfigMap
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    name: "{{ cm_name }}"
+    namespace: "{{ showroom_ns }}"
+  register: cm_info
+
+- name: Prepare updated user_data.yml
+  set_fact:
+    updated_user_data: |
+      {{ cm_info.resources[0].data['user_data.yml'] }}
+      {{ add_vars }}
+
+- name: Patch showroom-userdata ConfigMap
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: "{{ cm_name }}"
+        namespace: "{{ showroom_ns }}"
+      data:
+        user_data.yml: "{{ updated_user_data }}"

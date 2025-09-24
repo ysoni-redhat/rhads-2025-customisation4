@@ -1,2 +1,3 @@
 ---
-# vars file for rhads-2025-customisation
+openshift_cluster_ingress_domain: "{{ openshift_cluster_ingress_domain }}"
+openshift_console_url: "{{ openshift_console_url }}"

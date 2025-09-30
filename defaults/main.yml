@@ -10,3 +10,4 @@ argo_namespace: tssc-gitops
 argo_username: admin
 cluster_context: admin
 kubeconfig_path: "{{ ansible_env.HOME }}/.kube/config"
+ansible_python_interpreter: /opt/ansible-venv/bin/python

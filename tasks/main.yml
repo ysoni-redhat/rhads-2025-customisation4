@@ -1,18 +1,1 @@
----
-- name: Ensure python3.11 and venv are installed
-  package:
-    name:
-      - python3.11
-      - python3.11-venv
-    state: present
 
-- name: Create Ansible venv if not exists
-  command: python3.11 -m venv /opt/ansible-venv
-  args:
-    creates: /opt/ansible-venv/bin/activate
-
-- name: Upgrade pip inside venv
-  command: /opt/ansible-venv/bin/pip install --upgrade pip
-
-- name: Install Python dependencies in venv
-  command: /opt/ansible-venv/bin/pip install openshift kubernetes jmespath
